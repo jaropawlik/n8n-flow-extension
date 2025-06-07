@@ -1,0 +1,44 @@
+{
+  "name": "n8n-flow",
+  "displayName": "n8n Flow",
+  "version": "1.0.0",
+  "description": "AI-powered n8n workflow assistant",
+  "author": "n8n Flow Team",
+  "scripts": {
+    "dev": "plasmo dev --no-hashes",
+    "build": "plasmo build",
+    "package": "plasmo package"
+  },
+  "dependencies": {
+    "@plasmohq/storage": "1.9.0",
+    "plasmo": "^0.90.5",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.246",
+    "@types/node": "20.8.0",
+    "@types/react": "18.2.0",
+    "@types/react-dom": "18.2.0",
+    "typescript": "5.2.2"
+  },
+  "manifest": {
+    "host_permissions": [
+      "http://localhost:5678/*",
+      "https://app.n8n.cloud/*",
+      "https://automation.zufto.pl/*",
+      "https://api.openai.com/*"
+    ],
+    "permissions": [
+      "storage",
+      "activeTab",
+      "contextMenus"
+    ],
+    "web_accessible_resources": [
+      {
+        "resources": ["config.local.json"],
+        "matches": ["<all_urls>"]
+      }
+    ]
+  }
+} 

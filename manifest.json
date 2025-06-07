@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "n8n Flow",
+  "version": "1.0.0",
+  "description": "AI-powered assistant for n8n workflows",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://localhost:5678/*",
+    "https://app.n8n.cloud/*",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:5678/*",
+        "https://app.n8n.cloud/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "n8n Flow Settings"
+  }
+} 

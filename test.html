@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>n8n Flow Extension Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .node {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .error {
+            background: #fee;
+            border-left-color: #f56565;
+        }
+        h1 {
+            color: #667eea;
+        }
+        .instructions {
+            background: #e6f3ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #4299e1;
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 n8n Flow Extension Test Page</h1>
+    
+    <div class="instructions">
+        <h3>Test Instructions:</h3>
+        <ol>
+            <li>Make sure the extension is installed and enabled</li>
+            <li>Look for the purple chat button in the bottom-right corner</li>
+            <li>Click the chat button to open the assistant</li>
+            <li>Right-click anywhere to see context menu options</li>
+            <li>Test the popup by clicking the extension icon in the toolbar</li>
+        </ol>
+    </div>
+
+    <div class="container">
+        <h2>Simulated n8n Workflow</h2>
+        
+        <div class="node" data-name="NodeView">
+            <strong>HTTP Request Node</strong>
+            <p>Sends GET request to API endpoint</p>
+            <small>Status: Active</small>
+        </div>
+
+        <div class="node error" data-name="NodeView">
+            <strong>Set Node (Error)</strong>
+            <p class="error">Failed to process data - missing field 'user_id'</p>
+            <small>Status: Error</small>
+        </div>
+
+        <div class="node" data-name="NodeView">
+            <strong>Code Node</strong>
+            <p>JavaScript code for data transformation</p>
+            <small>Status: Active</small>
+        </div>
+
+        <div class="node" data-name="NodeView">
+            <strong>Gmail Node</strong>
+            <p>Send email notification</p>
+            <small>Status: Waiting</small>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>Expected Behavior:</h3>
+        <ul>
+            <li>✅ Purple floating chat button visible</li>
+            <li>✅ Chat panel opens when clicked</li>
+            <li>✅ Right-click menu shows n8n options</li>
+            <li>✅ Extension popup opens for API key setup</li>
+            <li>✅ No console errors related to React</li>
+        </ul>
+    </div>
+
+    <script>
+        // Simple test to ensure content script can detect n8n-like elements
+        document.addEventListener('DOMContentLoaded', () => {
+            const nodes = document.querySelectorAll('[data-name="NodeView"]');
+            const errors = document.querySelectorAll('.error');
+            
+            console.log('n8n Flow Test: Found', nodes.length, 'nodes and', errors.length, 'errors');
+            
+            // Test right-click functionality
+            document.addEventListener('contextmenu', (e) => {
+                console.log('Right-click detected at:', e.pageX, e.pageY);
+            });
+        });
+    </script>
+</body>
+</html> 
