@@ -1,4 +1,5 @@
 // Background service worker for n8n Flow extension
+import { RAGClient } from './ragClient'
 
 console.log("🚀 Background script starting...")
 
@@ -7,24 +8,41 @@ async function loadConfigOnStartup() {
   try {
     console.log("🔧 Background: Loading config on startup...")
     
-    // Check if API key is already in storage
-    const result = await chrome.storage.local.get(['apiKey'])
-    if (result.apiKey) {
-      console.log("🔑 Background: API key already loaded in storage")
-      return
-    }
-    
-    // Try to load from config.local.json
+    // Always try to load from config.local.json to get the latest key
     const configUrl = chrome.runtime.getURL('config.local.json')
     const response = await fetch(configUrl)
     
     if (response.ok) {
       const config = await response.json()
+      
       if (config.OPENAI_API_KEY) {
-        // Save to Chrome storage
+        // Always save to Chrome storage (overwrite existing)
         await chrome.storage.local.set({ apiKey: config.OPENAI_API_KEY })
-        console.log("✅ Background: API key loaded from config.local.json and saved to storage")
+        console.log("✅ Background: OpenAI API key loaded from config.local.json")
       }
+      
+      // Initialize RAG if Qdrant config is present
+      if (config.QDRANT_URL && config.QDRANT_API_KEY) {
+        console.log("🔧 Background: Initializing RAG with Qdrant...")
+        try {
+          const ragClient = RAGClient.getInstance()
+          const ragInitialized = await ragClient.initialize({
+            vectorDbUrl: config.QDRANT_URL,
+            apiKey: config.QDRANT_API_KEY
+          })
+          
+          if (ragInitialized) {
+            console.log("✅ Background: RAG initialized successfully")
+          } else {
+            console.warn("⚠️ Background: RAG initialization failed, falling back to mock data")
+          }
+        } catch (importError) {
+          console.error("❌ Background: Failed to initialize RAGClient:", importError)
+        }
+      } else {
+        console.log("ℹ️ Background: No Qdrant config found, RAG will use mock data")
+      }
+      
     } else {
       console.log("ℹ️ Background: No config.local.json found, API key will need to be set via popup")
     }
@@ -164,8 +182,12 @@ async function handleOpenAIMessage(message: any, sendResponse: (response: any) =
     console.log("🤖 Background: Context:", JSON.stringify(message.context, null, 2))
     
     // Get API key from storage
-    const result = await chrome.storage.local.get(['apiKey'])
+    const result = await chrome.storage.local.get(['apiKey', 'preferredModel'])
     console.log("🔑 Background: API key loaded:", result.apiKey ? "✅ Found" : "❌ Missing")
+    
+    // Default to GPT-4o if no preference set
+    const selectedModel = result.preferredModel || 'gpt-4o'
+    console.log("🤖 Background: Using model:", selectedModel)
     
     if (!result.apiKey) {
       console.error("❌ Background: No API key found")
@@ -174,6 +196,32 @@ async function handleOpenAIMessage(message: any, sendResponse: (response: any) =
         message: "API key not configured. Please set it in the extension popup." 
       })
       return
+    }
+
+    // Get relevant documentation using RAG
+    let ragContext = ""
+    try {
+      const ragClient = RAGClient.getInstance()
+      const relevantDocs = await ragClient.getRelevantDocs(message.userMessage, {
+        maxResults: 3,
+        minRelevanceScore: 0.3
+      })
+      
+      if (relevantDocs.length > 0) {
+        ragContext = `
+
+📚 Relevant n8n Documentation:
+${relevantDocs.map((doc, index) => 
+  `${index + 1}. **${doc.title}** (${doc.relevanceScore.toFixed(2)})
+   ${doc.content.substring(0, 300)}...
+   Source: ${doc.url || 'n8n docs'}`
+).join('\n\n')}
+
+`
+        console.log(`📚 Background: Added ${relevantDocs.length} relevant docs to context`)
+      }
+    } catch (error) {
+      console.warn("⚠️ Background: RAG search failed, continuing without documentation:", error)
     }
 
     // Create formatted context for AI
@@ -265,15 +313,15 @@ async function handleOpenAIMessage(message: any, sendResponse: (response: any) =
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: selectedModel,
         messages: [
           {
             role: 'system',
             content: `You are an expert n8n workflow assistant. Help with workflow creation, debugging, and optimization.
 
-${formatContext(message.context)}
+${formatContext(message.context)}${ragContext}
 
-Respond in Polish. Be specific about node names, types, and provide actionable advice.`
+Respond in Polish. Be specific about node names, types, and provide actionable advice. Use the n8n documentation provided above when relevant.`
           },
           {
             role: 'user',

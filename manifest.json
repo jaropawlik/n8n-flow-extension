@@ -11,7 +11,9 @@
   "host_permissions": [
     "http://localhost:5678/*",
     "https://app.n8n.cloud/*",
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://*.qdrant.io/*",
+    "https://*.aws.cloud.qdrant.io/*"
   ],
   "background": {
     "service_worker": "background.js"

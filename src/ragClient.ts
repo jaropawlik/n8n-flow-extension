@@ -47,9 +47,9 @@ export class RAGClient {
   private isInitialized: boolean = false
 
   private constructor() {
-    // Initialize with environment variables or defaults
-    // this.vectorDbUrl = process.env.QDRANT_URL || "http://localhost:6333"
-    // this.apiKey = process.env.QDRANT_API_KEY || ""
+    // Initialize with Qdrant Cloud defaults
+    this.vectorDbUrl = "https://your-cluster-url.qdrant.tech"
+    this.apiKey = "" // Will be set via config
   }
 
   public static getInstance(): RAGClient {
@@ -59,7 +59,7 @@ export class RAGClient {
     return RAGClient.instance
   }
 
-  // Initialize RAG client (future implementation)
+  // Initialize RAG client with Qdrant Cloud
   public async initialize(config?: {
     vectorDbUrl?: string
     apiKey?: string
@@ -70,12 +70,11 @@ export class RAGClient {
         this.apiKey = config.apiKey || this.apiKey
       }
 
-      // TODO: Test connection to vector database
-      // const testResponse = await this.testConnection()
-      // this.isInitialized = testResponse.success
+      // Test connection to Qdrant Cloud
+      const testResponse = await this.testConnection()
+      this.isInitialized = testResponse
 
-      console.log("RAG Client: Initialization stub - not yet implemented")
-      this.isInitialized = false
+      console.log(`RAG Client: ${this.isInitialized ? '✅' : '❌'} Qdrant Cloud connection`, this.vectorDbUrl)
       return this.isInitialized
 
     } catch (error) {
@@ -85,54 +84,61 @@ export class RAGClient {
     }
   }
 
-  // Main method to get relevant documents for a query
-  public async getRelevantDocs(query: string): Promise<RAGDocument[]> {
-    // TODO: Implement actual RAG integration
-    /*
-     * Integration steps:
-     * 1. Set up vector database (Qdrant: docker run -p 6333:6333 qdrant/qdrant)
-     * 2. Create embeddings using OpenAI embeddings API
-     * 3. Index n8n documentation in vector database
-     * 4. Implement semantic search
-     * 5. Return relevant documents
-     */
-
-    console.log("RAG Client: Mock implementation for query:", query)
-    
-    // Mock response for now
-    return [
-      {
-        id: "doc_1",
-        title: "n8n Function Node Documentation",
-        content: "The Function node allows you to write custom JavaScript code to process data in your workflows...",
-        url: "https://docs.n8n.io/nodes/n8n-nodes-base.function/",
-        category: "nodes",
-        relevanceScore: 0.95,
-        metadata: {
-          nodeType: "function",
-          tags: ["javascript", "custom-code"]
+  // Test connection to Qdrant Cloud
+  private async testConnection(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.vectorDbUrl}/collections`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.apiKey && { 'api-key': this.apiKey })
         }
-      },
-      {
-        id: "doc_2", 
-        title: "HTTP Request Node Setup",
-        content: "The HTTP Request node allows you to make HTTP requests to external APIs and services...",
-        url: "https://docs.n8n.io/nodes/n8n-nodes-base.httpRequest/",
-        category: "nodes",
-        relevanceScore: 0.87,
-        metadata: {
-          nodeType: "http",
-          tags: ["api", "requests"]
-        }
-      }
-    ]
+      })
+      
+      return response.ok
+    } catch (error) {
+      console.error("Qdrant connection test failed:", error)
+      return false
+    }
   }
 
-  // Create embedding for text (future implementation)
+  // Main method to get relevant documents for a query  
+  public async getRelevantDocs(query: string, options: RAGSearchOptions = {}): Promise<RAGDocument[]> {
+    try {
+      console.log("🔍 RAG Client: Searching for:", query)
+    
+      // Create embedding for the query
+      const queryEmbedding = await this.createEmbedding(query)
+      
+      if (queryEmbedding.length === 0) {
+        console.warn("Failed to create embedding, using mock data")
+        return this.getMockRelevantDocs(query, options)
+      }
+      
+      // Search vector database
+      const results = await this.searchVectorDB(queryEmbedding, options)
+      
+      console.log(`📚 RAG Client: Found ${results.length} relevant documents`)
+      return results
+      
+    } catch (error) {
+      console.error("RAG search failed:", error)
+      // Fallback to mock data
+      return this.getMockRelevantDocs(query, options)
+    }
+  }
+
+  // Create embedding for text using OpenAI API
   private async createEmbedding(text: string): Promise<number[]> {
     try {
-      // TODO: Use OpenAI embeddings API
-      /*
+      // Get OpenAI API key from storage
+      const storage = await chrome.storage.local.get(['apiKey'])
+      const openaiApiKey = storage.apiKey
+      
+      if (!openaiApiKey) {
+        throw new Error("OpenAI API key not found")
+      }
+      
       const response = await fetch('https://api.openai.com/v1/embeddings', {
         method: 'POST',
         headers: {
@@ -140,21 +146,101 @@ export class RAGClient {
           'Authorization': `Bearer ${openaiApiKey}`
         },
         body: JSON.stringify({
-          model: 'text-embedding-ada-002',
-          input: text
+          model: 'text-embedding-3-small',
+          input: text,
+          dimensions: 1536
         })
       })
       
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`)
+      }
+      
       const data = await response.json()
       return data.data[0].embedding
-      */
-      
-      // Mock embedding for now
-      return new Array(1536).fill(0).map(() => Math.random())
       
     } catch (error) {
       console.error("Embedding creation failed:", error)
       return []
+    }
+  }
+
+  // Search vector database for relevant documents
+  public async searchVectorDB(queryEmbedding: number[], options: RAGSearchOptions = {}): Promise<RAGDocument[]> {
+    try {
+      if (!this.isInitialized) {
+        console.warn("RAG Client not initialized, using mock data")
+        return this.getMockRelevantDocs("", options)
+      }
+
+      const searchPayload = {
+        vector: queryEmbedding,
+        limit: options.maxResults || 5,
+        score_threshold: options.minRelevanceScore || 0.3,
+        with_payload: true,
+        with_vector: false
+      }
+
+      // Add filters if specified
+      if (options.categories || options.nodeTypes) {
+        searchPayload["filter"] = {
+          must: []
+        }
+        
+        if (options.categories) {
+          searchPayload["filter"].must.push({
+            key: "category",
+            match: { any: options.categories }
+          })
+        }
+        
+        if (options.nodeTypes) {
+          searchPayload["filter"].must.push({
+            key: "nodeType", 
+            match: { any: options.nodeTypes }
+          })
+        }
+      }
+
+      console.log("🔍 RAG: Searching cogiflow with payload:", searchPayload)
+
+      const response = await fetch(`${this.vectorDbUrl}/collections/cogiflow/points/search`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.apiKey && {"api-key": this.apiKey}
+        },
+        body: JSON.stringify(searchPayload)
+      })
+
+      if (!response.ok) {
+        console.error(`❌ Vector DB search failed: ${response.status}`)
+        throw new Error(`Vector DB search failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("📊 RAG: Qdrant response:", data)
+      
+      if (!data.result || data.result.length === 0) {
+        console.warn("⚠️ No results from Qdrant, using mock data")
+        return this.getMockRelevantDocs("", options)
+      }
+      
+      return data.result.map((result: any) => ({
+        id: result.id,
+        title: result.payload.title,
+        content: result.payload.content,
+        url: result.payload.url,
+        category: result.payload.category,
+        relevanceScore: result.score,
+        metadata: result.payload.metadata
+      }))
+
+    } catch (error) {
+      console.error("Vector database search failed:", error)
+      // Fallback to mock data
+      console.log("🔄 Using mock data as fallback")
+      return this.getMockRelevantDocs("", options)
     }
   }
 
